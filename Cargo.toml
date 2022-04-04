@@ -1,0 +1,8 @@
+[package]
+name = "afire_tls"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+afire = { git = "https://github.com/Basicprogrammer10/afire.git", branch = "dev" }
+native-tls = "0.2.10"
