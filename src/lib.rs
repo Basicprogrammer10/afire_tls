@@ -1,11 +1,19 @@
-use std::io::{Cursor, Read, Write};
-use std::iter;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
+use std::{io, net};
 
-use afire::{internal::socket_handler::SocketHandler, Server};
-use rustls::{Certificate, PrivateKey, ServerConfig, ServerConnection};
-use rustls_pemfile::{read_one, Item};
-// pub use rustls::I
+use afire::{
+    error,
+    internal::{
+        event_loop::EventLoop,
+        handle,
+        socket::{Socket, SocketStream, Stream},
+    },
+    Server,
+};
+use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
 pub struct AfireTls {
     config: Arc<ServerConfig>,
@@ -13,72 +21,88 @@ pub struct AfireTls {
 
 impl AfireTls {
     pub fn new(cert: Vec<u8>, key: Vec<u8>) -> Self {
-        // Load Key
-        let mut key = Cursor::new(key);
-        let real_key = match read_one(&mut key).unwrap().unwrap() {
-            Item::RSAKey(key) => key,
-            Item::PKCS8Key(key) => key,
-            Item::ECKey(key) => key,
-            _ => panic!("Invalid Key"),
-        };
+        let key = rustls_pemfile::private_key(&mut key.as_slice())
+            .expect("failed to load private key")
+            .unwrap();
+        let certs = rustls_pemfile::certs(&mut cert.as_slice())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
 
-        // Load Cert
-        let mut cert = Cursor::new(cert);
-        let real_cert = iter::from_fn(|| read_one(&mut cert).transpose())
-            .into_iter()
-            .map(|x| match x.unwrap() {
-                Item::X509Certificate(cert) => cert,
-                _ => panic!("Invalid Certificate"),
-            })
-            .map(|x| Certificate(x))
-            .collect::<Vec<_>>();
-
-        // Build server config
         let config = ServerConfig::builder()
-            .with_safe_defaults()
             .with_no_client_auth()
-            .with_single_cert(real_cert, PrivateKey(real_key))
-            .expect("Bad Certificate or Key");
-        let config = Arc::new(config);
+            .with_single_cert(certs, key)
+            .unwrap();
 
-        Self { config }
+        Self {
+            config: Arc::new(config),
+        }
+    }
+}
+
+impl<State: Send + Sync> EventLoop<State> for AfireTls {
+    fn run(&self, server: Arc<Server<State>>, addr: SocketAddr) -> error::Result<()> {
+        let listener = TcpListener::bind(addr)?;
+
+        for i in listener.incoming() {
+            if !server.running.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+
+            let event = match i {
+                Ok(event) => event,
+                Err(err) => {
+                    println!("Error accepting connection: {}", err);
+                    continue;
+                }
+            };
+
+            let connection = ServerConnection::new(self.config.clone()).unwrap();
+            let stream = StreamOwned::new(connection, event);
+            let event = Arc::new(Socket::new(TlsStream { inner: stream }));
+
+            handle::handle(event, server.clone());
+        }
+
+        Ok(())
+    }
+}
+
+struct TlsStream {
+    inner: StreamOwned<ServerConnection, TcpStream>,
+}
+
+impl Read for TlsStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl Write for TlsStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
     }
 
-    pub fn attatch(self, server: &mut Server) {
-        let cf1 = self.config.clone();
-        let cf2 = self.config.clone();
-        let cf3 = self.config.clone();
-        let cf4 = self.config;
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
 
-        server.socket_handler = SocketHandler {
-            socket_read: Box::new(move |x, buff| {
-                let mut conn = ServerConnection::new(cf1.to_owned()).ok()?;
-                conn.read_tls(x).ok()?;
-                let out = conn.reader().read(buff).ok();
-                conn.process_new_packets().ok();
-                out
-            }),
-            socket_read_exact: Box::new(move |x, buff| {
-                let mut conn = ServerConnection::new(cf2.to_owned()).ok()?;
-                conn.read_tls(x).ok()?;
-                let out = conn.reader().read_exact(buff).ok();
-                conn.process_new_packets().ok();
-                out
-            }),
-            socket_flush: Box::new(move |x| {
-                let mut conn = ServerConnection::new(cf3.to_owned()).ok()?;
-                conn.write_tls(x).ok()?;
-                let out = conn.writer().flush().ok();
-                conn.process_new_packets().ok();
-                out
-            }),
-            socket_write: Box::new(move |x, y| {
-                let mut conn = ServerConnection::new(cf4.to_owned()).ok()?;
-                conn.write_tls(x).ok()?;
-                let out = conn.writer().write_all(y).ok();
-                conn.process_new_packets().ok();
-                out
-            }),
-        };
+impl Stream for TlsStream {
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.sock.peer_addr()
+    }
+
+    fn try_clone(&self) -> io::Result<SocketStream> {
+        todo!()
+    }
+
+    fn shutdown(&self, shutdown: net::Shutdown) -> io::Result<()> {
+        self.inner.sock.shutdown(shutdown)
+    }
+
+    fn set_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
+        self.inner.sock.set_read_timeout(duration)?;
+        self.inner.sock.set_write_timeout(duration)?;
+        Ok(())
     }
 }

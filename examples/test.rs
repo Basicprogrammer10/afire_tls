@@ -1,15 +1,22 @@
-use afire::prelude::*;
+use afire::{
+    prelude::*,
+    trace::{self, Level},
+};
 use afire_tls::AfireTls;
 
 fn main() {
-    let mut server = Server::new("localhost", 8080);
+    trace::set_log_level(Level::Debug);
 
-    server.route(Method::GET, "/", |_| Response::new().text("Ello World"));
-    AfireTls::new(
+    let mut server = Server::<()>::new("localhost", 8080);
+    server.event_loop = Box::new(AfireTls::new(
         include_bytes!("../data/localhost.crt").to_vec(),
         include_bytes!("../data/localhost.key").to_vec(),
-    );
-    // .attatch(&mut server);
+    ));
 
-    server.start().unwrap();
+    server.route(Method::GET, "/", |ctx| {
+        ctx.text("Hello, world!").send()?;
+        Ok(())
+    });
+
+    server.run().unwrap();
 }

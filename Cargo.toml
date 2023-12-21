@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 afire = { git = "https://github.com/Basicprogrammer10/afire.git", branch = "dev" }
-rustls = "0.20.4"
-rustls-pemfile = "0.3.0"
+rustls = "0.22.1"
+rustls-pemfile = "2.0.0"
