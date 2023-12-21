@@ -1,6 +1,6 @@
-# afire_tls
+# afire_tls [![Build](https://github.com/Basicprogrammer10/afire_tls/actions/workflows/rust.yml/badge.svg)](https://github.com/Basicprogrammer10/afire_tls/actions/workflows/rust.yml)
 
-TLS support for the [afire] webserver framework.
+TLS support for the [afire](https://github.com/Basicprogrammer10/afire) webserver framework.
 
 The current implementation only supports [rustls](https://github.com/rustls/rustls), but [native-tls](https://github.com/sfackler/rust-native-tls) support is planned.
 
