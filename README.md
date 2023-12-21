@@ -7,8 +7,8 @@ The current implementation only supports [rustls](https://github.com/rustls/rust
 ```rust
 let mut server = Server::<()>::new("localhost", 8080)
     .event_loop(AfireTls::new(
-        include_bytes!("localhost.crt").to_vec(),
-        include_bytes!("localhost.key").to_vec(),
+        include_bytes!("localhost.crt"),
+        include_bytes!("localhost.key"),
     ));
 
 server.route(Method::GET, "/", |ctx| {

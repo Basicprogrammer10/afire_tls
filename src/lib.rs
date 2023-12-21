@@ -20,11 +20,14 @@ pub struct AfireTls {
 }
 
 impl AfireTls {
-    pub fn new(cert: Vec<u8>, key: Vec<u8>) -> Self {
-        let key = rustls_pemfile::private_key(&mut key.as_slice())
+    pub fn new(cert: &[u8], key: &[u8]) -> Self {
+        let mut cert = &mut io::Cursor::new(cert);
+        let mut key = &mut io::Cursor::new(key);
+
+        let key = rustls_pemfile::private_key(&mut key)
             .expect("failed to load private key")
             .unwrap();
-        let certs = rustls_pemfile::certs(&mut cert.as_slice())
+        let certs = rustls_pemfile::certs(&mut cert)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
