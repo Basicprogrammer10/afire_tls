@@ -3,6 +3,7 @@
 TLS support for the [afire](https://github.com/Basicprogrammer10/afire) webserver framework.
 
 The current implementation only supports [rustls](https://github.com/rustls/rustls), but [native-tls](https://github.com/sfackler/rust-native-tls) support is planned.
+Also currently afire websockets don't work with the TLS event loop.
 
 ```rust
 let mut server = Server::<()>::new("localhost", 8080)

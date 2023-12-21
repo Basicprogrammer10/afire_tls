@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{io, net};
@@ -40,6 +41,12 @@ impl AfireTls {
             config: Arc::new(config),
         }
     }
+
+    pub fn from_config(config: ServerConfig) -> Self {
+        Self {
+            config: Arc::new(config),
+        }
+    }
 }
 
 impl<State: Send + Sync> EventLoop<State> for AfireTls {
@@ -47,7 +54,7 @@ impl<State: Send + Sync> EventLoop<State> for AfireTls {
         let listener = TcpListener::bind(addr)?;
 
         for i in listener.incoming() {
-            if !server.running.load(std::sync::atomic::Ordering::Relaxed) {
+            if !server.running.load(Ordering::Relaxed) {
                 break;
             }
 
@@ -96,7 +103,10 @@ impl Stream for TlsStream {
     }
 
     fn try_clone(&self) -> io::Result<SocketStream> {
-        todo!()
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "TLS streams cannot be cloned",
+        ))
     }
 
     fn shutdown(&self, shutdown: net::Shutdown) -> io::Result<()> {
