@@ -66,11 +66,14 @@ impl<State: Send + Sync> EventLoop<State> for AfireTls {
                 }
             };
 
-            let connection = ServerConnection::new(self.config.clone()).unwrap();
-            let stream = StreamOwned::new(connection, event);
-            let event = Arc::new(Socket::new(TlsStream { inner: stream }));
-
-            handle::handle(event, server.clone());
+            let this_server = server.clone();
+            let config = self.config.clone();
+            server.thread_pool.execute(|| {
+                let connection = ServerConnection::new(config).unwrap();
+                let stream = StreamOwned::new(connection, event);
+                let event = Arc::new(Socket::new(TlsStream { inner: stream }));
+                handle::handle(event, this_server);
+            });
         }
 
         Ok(())
